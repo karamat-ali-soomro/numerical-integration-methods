@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Numerical Integration</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 30px auto;
+            padding: 0 16px;
+            line-height: 1.5;
+        }
+
+        h1 {
+            text-align: center;
+        }
+
+        .form-row {
+            margin: 12px 0;
+        }
+
+        label {
+            display: inline-block;
+            width: 230px;
+        }
+
+        input, select, button {
+            padding: 7px;
+            font-size: 16px;
+        }
+
+        input, select {
+            width: 180px;
+            max-width: 100%;
+        }
+
+        button {
+            margin-top: 10px;
+            cursor: pointer;
+        }
+
+        .results {
+            margin-top: 22px;
+            padding: 14px;
+            background: #f2f2f2;
+            border-radius: 8px;
+        }
+
+        .error {
+            color: #b00020;
+            font-weight: bold;
+        }
+
+        .note {
+            color: #444;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Numerical Integration</h1>
+    <p>Choose a function and enter the interval and number of subintervals. The page calculates the integral using both methods.</p>
+
+    <div class="form-row">
+        <label for="functionChoice">Choose a function:</label>
+        <select id="functionChoice">
+            <option value="square">f(x) = x²</option>
+            <option value="sine">f(x) = sin(x)</option>
+            <option value="exponential">f(x) = eˣ</option>
+            <option value="linear">f(x) = x + 1</option>
+        </select>
+    </div>
+
+    <div class="form-row">
+        <label for="a">Start of interval (a):</label>
+        <input id="a" type="number" value="0" step="any">
+    </div>
+
+    <div class="form-row">
+        <label for="b">End of interval (b):</label>
+        <input id="b" type="number" value="1" step="any">
+    </div>
+
+    <div class="form-row">
+        <label for="n">Number of subintervals (n):</label>
+        <input id="n" type="number" value="10" min="1" step="1">
+    </div>
+
+    <div class="form-row">
+        <label for="accuracy">Desired accuracy:</label>
+        <input id="accuracy" type="number" value="0.0001" min="0.000000000001" step="any">
+    </div>
+
+    <button id="calculateButton">Calculate integral</button>
+
+    <div class="results" id="results" aria-live="polite">
+        The results will appear here.
+    </div>
+
+    <script>
+        // This function gives us the selected mathematical function.
+        function getFunction(choice) {
+            if (choice === "square") {
+                return x => x * x;
+            }
+
+            if (choice === "sine") {
+                return x => Math.sin(x);
+            }
+
+            if (choice === "exponential") {
+                return x => Math.exp(x);
+            }
+
+            return x => x + 1;
+        }
+
+        // This is the trapezoidal rule.
+        function trapezoidalRule(f, a, b, n) {
+            const h = (b - a) / n;
+            let sum = (f(a) + f(b)) / 2;
+
+            // Add the function values at all inner points.
+            for (let i = 1; i < n; i++) {
+                sum += f(a + i * h);
+            }
+
+            return sum * h;
+        }
+
+        // This is Simpson's rule. The number of subintervals must be even.
+        function simpsonsRule(f, a, b, n) {
+            if (n % 2 !== 0) {
+                n++;
+            }
+
+            const h = (b - a) / n;
+            let sum = f(a) + f(b);
+
+            // Odd points have weight 4, and even inner points have weight 2.
+            for (let i = 1; i < n; i++) {
+                if (i % 2 === 0) {
+                    sum += 2 * f(a + i * h);
+                } else {
+                    sum += 4 * f(a + i * h);
+                }
+            }
+
+            return (h / 3) * sum;
+        }
+
+        // Increase n until the estimated error is smaller than the target accuracy.
+        // This uses Richardson error estimates for the two methods.
+        function chooseStepSize(method, f, a, b, startingN, accuracy) {
+            let n = startingN;
+
+            // Simpson's rule needs an even number of subintervals.
+            if (method === simpsonsRule && n % 2 !== 0) {
+                n++;
+            }
+
+            let oldResult = method(f, a, b, n);
+            const errorDivisor = method === trapezoidalRule ? 3 : 15;
+
+            // This limit prevents the program from running forever.
+            for (let attempt = 0; attempt < 25; attempt++) {
+                n *= 2;
+                const newResult = method(f, a, b, n);
+
+                // Estimate the error from the results with n and 2*n subintervals.
+                const estimatedError = Math.abs(newResult - oldResult) / errorDivisor;
+
+                if (estimatedError < accuracy) {
+                    return {
+                        result: newResult,
+                        n: n,
+                        h: (b - a) / n,
+                        estimatedError: estimatedError,
+                        reached: true
+                    };
+                }
+
+                oldResult = newResult;
+            }
+
+            return {
+                result: oldResult,
+                n: n,
+                h: (b - a) / n,
+                estimatedError: null,
+                reached: false
+            };
+        }
+
+        // Read the user's values, calculate both methods, and show the results.
+        function calculate() {
+            const a = Number(document.getElementById("a").value);
+            const b = Number(document.getElementById("b").value);
+            const n = Number(document.getElementById("n").value);
+            const accuracy = Number(document.getElementById("accuracy").value);
+            const choice = document.getElementById("functionChoice").value;
+            const results = document.getElementById("results");
+
+            // Check the inputs before doing any calculations.
+            if (
+                document.getElementById("a").value === "" ||
+                document.getElementById("b").value === "" ||
+                document.getElementById("n").value === "" ||
+                document.getElementById("accuracy").value === "" ||
+                !Number.isFinite(a) ||
+                !Number.isFinite(b) ||
+                !Number.isInteger(n) ||
+                n < 1 ||
+                !Number.isFinite(accuracy) ||
+                accuracy <= 0
+            ) {
+                results.innerHTML = '<p class="error">Please enter valid numbers. n must be a positive integer, and accuracy must be greater than zero.</p>';
+                return;
+            }
+
+            const f = getFunction(choice);
+
+            // Calculate using the number of subintervals entered by the user.
+            const trapResult = trapezoidalRule(f, a, b, n);
+            const simpsonN = n % 2 === 0 ? n : n + 1;
+            const simpsonResult = simpsonsRule(f, a, b, simpsonN);
+
+            // Find a suitable step size automatically for each method.
+            const trapAuto = chooseStepSize(trapezoidalRule, f, a, b, n, accuracy);
+            const simpsonAuto = chooseStepSize(simpsonsRule, f, a, b, simpsonN, accuracy);
+
+            results.innerHTML = `
+                <h2>Results</h2>
+                <p><strong>Interval:</strong> [${a}, ${b}]</p>
+                <p><strong>Function:</strong> ${document.getElementById("functionChoice").selectedOptions[0].text}</p>
+
+                <h3>Using the entered number of subintervals</h3>
+                <p><strong>Trapezoidal rule:</strong> ${trapResult.toFixed(10)} (n = ${n}, h = ${((b - a) / n).toPrecision(6)})</p>
+                <p><strong>Simpson's rule:</strong> ${simpsonResult.toFixed(10)} (n = ${simpsonN}, h = ${((b - a) / simpsonN).toPrecision(6)})</p>
+                ${n % 2 !== 0 ? '<p class="note">Your n was odd, so Simpson’s rule used n + 1 because it needs an even number of subintervals.</p>' : ''}
+
+                <h3>Automatic step size selection</h3>
+                <p><strong>Trapezoidal rule:</strong> ${trapAuto.result.toFixed(10)}</p>
+                <p>Subintervals: ${trapAuto.n}, step size h: ${trapAuto.h.toPrecision(6)}</p>
+                <p class="note">${trapAuto.reached ? 'Estimated error: ' + trapAuto.estimatedError.toExponential(3) + '.' : 'The target accuracy was not reached within the iteration limit.'}</p>
+
+                <p><strong>Simpson's rule:</strong> ${simpsonAuto.result.toFixed(10)}</p>
+                <p>Subintervals: ${simpsonAuto.n}, step size h: ${simpsonAuto.h.toPrecision(6)}</p>
+                <p class="note">${simpsonAuto.reached ? 'Estimated error: ' + simpsonAuto.estimatedError.toExponential(3) + '.' : 'The target accuracy was not reached within the iteration limit.'}</p>
+            `;
+        }
+
+        document.getElementById("calculateButton").addEventListener("click", calculate);
+
+        // Show results for the default values when the page opens.
+        calculate();
+    </script>
+</body>
+</html>
